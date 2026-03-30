@@ -182,7 +182,7 @@ export default function BlueprintDiff({ a, b, onClose }: Props) {
           <h2 className="text-xs uppercase tracking-widest mb-3 font-semibold" style={{ color: "var(--text-muted)" }}>
             Overview
           </h2>
-          <div className="glass rounded-xl divide-y" style={{ borderColor: "var(--border-glass)", divideColor: "var(--border-glass)" }}>
+          <div className="glass rounded-xl divide-y" style={{ borderColor: "var(--border-glass)" }}>
 
             {/* Category */}
             <div className="flex items-center gap-3 px-5 py-3 text-sm">
