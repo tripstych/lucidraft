@@ -9,7 +9,13 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "pm2:start": "node scripts/start-services.js",
+    "pm2:stop": "node scripts/stop-services.js",
+    "pm2:restart": "node scripts/restart-services.js",
+    "pm2:status": "pm2 status",
+    "pm2:logs": "pm2 logs",
+    "pm2:monit": "pm2 monit"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
