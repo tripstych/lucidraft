@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLucidraftStore } from "@/lib/store";
 import { AnalysisResult } from "@/types";
@@ -14,9 +14,10 @@ const PLACEHOLDERS = [
 
 export default function PitchInput() {
   const [text, setText] = useState("");
-  const [placeholder] = useState(
-    PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)]
-  );
+  const [placeholder, setPlaceholder] = useState(PLACEHOLDERS[0]);
+  useEffect(() => {
+    setPlaceholder(PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)]);
+  }, []);
   const [error, setError] = useState("");
   const [cacheHit, setCacheHit] = useState(false);
 
