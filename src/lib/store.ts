@@ -149,7 +149,7 @@ export const useLucidraftStore = create<LucidraftStore>()(
         }
 
         if (Object.keys(updates).length > 0) {
-          set((s) => ({ projectDetails: { ...s.projectDetails, ...updates } }));
+          set((s) => ({ projectDetails: { ...s.projectDetails, ...updates } as ProjectDetails }));
         }
       },
 
