@@ -465,7 +465,7 @@ interface DocumentProps {
   editable?: boolean;
 }
 
-function BlueprintDocument({
+function BlueprintDoc({
   pitch,
   analysis,
   answers,
@@ -743,7 +743,7 @@ function FullscreenPreview({ onClose, ...docProps }: DocumentProps & { onClose: 
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
         style={{ width: "100%", maxWidth: "700px" }}
       >
-        <BlueprintDocument {...docProps} editable={false} />
+        <BlueprintDoc {...docProps} editable={false} />
       </motion.div>
     </motion.div>
   );
@@ -872,7 +872,7 @@ export default function Blueprint() {
 
         {/* Inline document — editable */}
         <div className="rounded-2xl overflow-hidden mb-5" style={{ border: "1px solid var(--border-glass)", boxShadow: "0 0 40px rgba(124,106,247,0.12)" }}>
-          <BlueprintDocument {...docProps} editable={true} />
+          <BlueprintDoc {...docProps} editable={true} />
         </div>
 
         {/* Action bar */}
