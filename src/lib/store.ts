@@ -60,6 +60,9 @@ interface LucidraftStore {
   setCachedAnalysis: (pitch: string, result: AnalysisResult) => void;
   clearCacheEntry: (pitch: string) => void;
 
+  // ── vitals sync ────────────────────────────────────────────
+  syncVitalsFromAnswers: () => void;
+
   // ── history actions ────────────────────────────────────────
   saveBlueprint: () => void;
   loadBlueprint: (id: string) => void;
@@ -107,6 +110,43 @@ export const useLucidraftStore = create<LucidraftStore>()(
       setProjectDetail: (key, value) =>
         set((s) => ({ projectDetails: { ...s.projectDetails, [key]: value } })),
       reset: () => set(sessionDefaults),
+
+      // vitals sync — auto-populate empty vital fields from Q&A answers
+      syncVitalsFromAnswers: () => {
+        const { analysis, answers, projectDetails } = get();
+        if (!analysis) return;
+
+        // Pattern → vital key mapping (only fills if the vital is currently empty)
+        const PATTERNS: Array<{ re: RegExp; key: keyof ProjectDetails }> = [
+          { re: /host|deploy/i,         key: "hosting" },
+          { re: /auth/i,                key: "authMethod" },
+          { re: /domain|url|site/i,     key: "domain" },
+          { re: /repo|repositor/i,      key: "repository" },
+          { re: /budget/i,              key: "budgetRange" },
+          { re: /launch|timeline|deadline/i, key: "targetLaunch" },
+          { re: /contact/i,             key: "primaryContact" },
+        ];
+
+        const updates: Partial<ProjectDetails> = {};
+
+        for (const q of analysis.dynamicQuestions) {
+          for (const { re, key } of PATTERNS) {
+            if (re.test(q.id) || re.test(q.label)) {
+              // Only overwrite if the vital is still blank
+              if (!projectDetails[key]?.trim()) {
+                const raw = answers[q.id];
+                if (raw) {
+                  updates[key] = Array.isArray(raw) ? raw.join(", ") : raw;
+                }
+              }
+            }
+          }
+        }
+
+        if (Object.keys(updates).length > 0) {
+          set((s) => ({ projectDetails: { ...s.projectDetails, ...updates } }));
+        }
+      },
 
       // cache
       getCachedAnalysis: (pitch) => {

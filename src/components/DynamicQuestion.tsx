@@ -197,6 +197,7 @@ export default function DynamicQuestionStep() {
     nextQuestion,
     prevQuestion,
     setStep,
+    syncVitalsFromAnswers,
   } = useLucidraftStore();
 
   const [localValue, setLocalValue] = useState<string | string[]>("");
@@ -213,6 +214,7 @@ export default function DynamicQuestionStep() {
     setAnswer(question.id, displayValue);
     setLocalValue("");
     if (isLast) {
+      syncVitalsFromAnswers();
       if (analysis!.visualRequirements) {
         setStep("moodboard");
       } else {

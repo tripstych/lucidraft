@@ -54,7 +54,7 @@ const STYLES = ["Flat / Solid", "Glassmorphic", "Neumorphic", "Brutalist", "Illu
 export default function MoodBoard() {
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
-  const { setMoodSelection, setStep } = useLucidraftStore();
+  const { setMoodSelection, setStep, syncVitalsFromAnswers } = useLucidraftStore();
 
   const canContinue = selectedMood && selectedStyle;
 
@@ -65,6 +65,7 @@ export default function MoodBoard() {
       mood: mood.label,
       style: selectedStyle!,
     });
+    syncVitalsFromAnswers();
     setStep("blueprint");
   }
 
