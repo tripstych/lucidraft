@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLucidraftStore } from "@/lib/store";
-import { AnalysisResult, MoodSelection, ProjectDetails } from "@/types";
+import { AnalysisResult, BlueprintDocument, MoodSelection, ProjectDetails } from "@/types";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -11,6 +11,12 @@ const COMPLEXITY_DOT: Record<string, string> = {
   Simple: "#4ade80",
   Medium: "#facc15",
   Complex: "#f87171",
+};
+
+const EFFORT_COLOR: Record<string, string> = {
+  Low: "#4ade80",
+  Medium: "#facc15",
+  High: "#f87171",
 };
 
 function formatDate(iso?: string) {
@@ -38,7 +44,8 @@ function buildPlainText(
   answers: Record<string, string | string[]>,
   mood: MoodSelection | null,
   suggestions: string,
-  projectDetails: ProjectDetails
+  projectDetails: ProjectDetails,
+  doc: BlueprintDocument | null
 ): string {
   const lines: string[] = [
     "PROJECT BLUEPRINT — Lucidraft",
@@ -70,20 +77,41 @@ function buildPlainText(
     })
   );
 
+  if (doc) {
+    lines.push("", "EXECUTIVE SUMMARY", doc.executive_summary);
+
+    lines.push(
+      "",
+      "TECHNICAL ARCHITECTURE",
+      `Backend:        ${doc.technical_architecture.backend}`,
+      `Frontend:       ${doc.technical_architecture.frontend}`,
+      `Database:       ${doc.technical_architecture.database}`,
+      `Infrastructure: ${doc.technical_architecture.infrastructure}`
+    );
+
+    lines.push("", "WORK BREAKDOWN STRUCTURE");
+    doc.work_breakdown_structure.forEach((phase) => {
+      lines.push(`\n${phase.name}`);
+      phase.tasks.forEach((t) => lines.push(`  [${t.priority}] [${t.estimated_effort}] ${t.name}`));
+    });
+
+    lines.push("", "RISK ASSESSMENT");
+    doc.risk_assessment.forEach((r, i) => {
+      lines.push(`${i + 1}. ${r.risk}`);
+      lines.push(`   Mitigation: ${r.mitigation_strategy}`);
+    });
+
+    lines.push("", "DATA MODEL");
+    doc.data_model_preview.forEach((e) => {
+      lines.push(`• ${e.name}: ${e.relationships.join("; ")}`);
+    });
+
+    lines.push("", "EXTERNAL INTEGRATIONS", ...doc.external_integrations.map((i) => `• ${i}`));
+  }
+
   if (mood) {
     lines.push("", "VISUAL IDENTITY", `Mood: ${mood.mood}`, `Style: ${mood.style}`);
   }
-
-  lines.push(
-    "",
-    "NEXT STEPS",
-    "1. Share this blueprint with your development team",
-    "2. Schedule a kickoff call to align on scope",
-    "3. Request a detailed quote based on complexity",
-    analysis.visualRequirements
-      ? "4. Commission brand identity assets"
-      : "4. Finalize wireframes and user flows"
-  );
 
   if (suggestions.trim()) {
     lines.push("", "NOTES & SUGGESTIONS", suggestions.trim());
@@ -120,7 +148,7 @@ function VitalField({
           className="w-full px-3 py-1.5 rounded-lg text-xs outline-none transition-colors"
           style={{
             background: value ? "#f9fafb" : "#f3f4f6",
-            border: `1px solid ${value ? "#e5e7eb" : "#e5e7eb"}`,
+            border: "1px solid #e5e7eb",
             color: "#374151",
           }}
         />
@@ -134,14 +162,14 @@ function VitalField({
 }
 
 const VITAL_FIELDS: { key: keyof ProjectDetails; label: string; placeholder: string }[] = [
-  { key: "projectName",   label: "Project name",         placeholder: "e.g. Acme Dashboard" },
-  { key: "domain",        label: "Domain / URL",          placeholder: "e.g. app.acme.com" },
-  { key: "hosting",       label: "Hosting / deployment",  placeholder: "e.g. Vercel, AWS, self-hosted" },
-  { key: "repository",    label: "Repository",            placeholder: "e.g. github.com/org/repo" },
-  { key: "authMethod",    label: "Authentication",        placeholder: "e.g. Email + Google OAuth" },
-  { key: "budgetRange",   label: "Budget range",          placeholder: "e.g. £5k–£15k" },
-  { key: "targetLaunch",  label: "Target launch",         placeholder: "e.g. Q3 2025" },
-  { key: "primaryContact",label: "Primary contact",       placeholder: "e.g. Jane Smith, jane@acme.com" },
+  { key: "projectName",    label: "Project name",         placeholder: "e.g. Acme Dashboard" },
+  { key: "domain",         label: "Domain / URL",          placeholder: "e.g. app.acme.com" },
+  { key: "hosting",        label: "Hosting / deployment",  placeholder: "e.g. Vercel, AWS, self-hosted" },
+  { key: "repository",     label: "Repository",            placeholder: "e.g. github.com/org/repo" },
+  { key: "authMethod",     label: "Authentication",        placeholder: "e.g. Email + Google OAuth" },
+  { key: "budgetRange",    label: "Budget range",          placeholder: "e.g. £5k–£15k" },
+  { key: "targetLaunch",   label: "Target launch",         placeholder: "e.g. Q3 2025" },
+  { key: "primaryContact", label: "Primary contact",       placeholder: "e.g. Jane Smith, jane@acme.com" },
 ];
 
 function ProjectVitals({ editable }: { editable: boolean }) {
@@ -166,7 +194,7 @@ function EditableAnswer({
   questionId: string;
   label: string;
   index: number;
-  options?: string[];
+  options?: string[] | null;
   multi: boolean;
 }) {
   const { answers, setAnswer } = useLucidraftStore();
@@ -175,15 +203,15 @@ function EditableAnswer({
   const inputRef = useRef<HTMLInputElement>(null);
   const customInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (editing && !hasOptions && inputRef.current) inputRef.current.focus();
-  }, [editing]);
-
   const raw = answers[questionId];
   const value: string[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
   const hasOptions = (options?.length ?? 0) > 0;
   const presetOptions = options ?? [];
   const customValues = value.filter((v) => !presetOptions.includes(v));
+
+  useEffect(() => {
+    if (editing && !hasOptions && inputRef.current) inputRef.current.focus();
+  }, [editing, hasOptions]);
 
   function toggleOption(opt: string) {
     if (multi) {
@@ -268,7 +296,6 @@ function EditableAnswer({
               );
             })}
 
-            {/* Custom value chips */}
             {multi && customValues.length > 0 && (
               <div className="flex flex-wrap gap-1.5 py-1">
                 {customValues.map((v) => (
@@ -282,7 +309,6 @@ function EditableAnswer({
               </div>
             )}
 
-            {/* Type your own */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: "#f9fafb", border: "1px solid #e5e7eb" }}>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
               <input
@@ -291,10 +317,7 @@ function EditableAnswer({
                 value={hasOptions ? customInput : (value[0] ?? "")}
                 onChange={(e) => hasOptions ? setCustomInput(e.target.value) : setAnswer(questionId, e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    hasOptions ? addCustom() : setEditing(false);
-                  }
+                  if (e.key === "Enter") { e.preventDefault(); hasOptions ? addCustom() : setEditing(false); }
                 }}
                 placeholder={hasOptions ? "Type your own..." : "Your answer..."}
                 className="flex-1 bg-transparent outline-none text-xs"
@@ -307,19 +330,122 @@ function EditableAnswer({
               )}
             </div>
 
-            {hasOptions && (
-              <button onClick={() => setEditing(false)} className="text-xs px-3 py-1 rounded-lg" style={{ background: "#7c6af7", color: "#fff", border: "none" }}>
-                Done
-              </button>
-            )}
-            {!hasOptions && (
-              <button onClick={() => setEditing(false)} className="text-xs px-3 py-1 rounded-lg" style={{ background: "#7c6af7", color: "#fff", border: "none" }}>
-                Save
-              </button>
-            )}
+            <button onClick={() => setEditing(false)} className="text-xs px-3 py-1 rounded-lg" style={{ background: "#7c6af7", color: "#fff", border: "none" }}>
+              {hasOptions ? "Done" : "Save"}
+            </button>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── rich blueprint sections ─────────────────────────────────────────────────
+
+function SectionDivider() {
+  return <hr style={{ borderColor: "rgba(0,0,0,0.08)", margin: "1.5rem 0" }} />;
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#9ca3af" }}>
+      {children}
+    </p>
+  );
+}
+
+function Skeleton({ lines = 3 }: { lines?: number }) {
+  return (
+    <div className="space-y-2 animate-pulse">
+      {Array.from({ length: lines }).map((_, i) => (
+        <div key={i} className="h-3 rounded" style={{ background: "#f3f4f6", width: i === lines - 1 ? "60%" : "100%" }} />
+      ))}
+    </div>
+  );
+}
+
+function TechArchSection({ arch }: { arch: BlueprintDocument["technical_architecture"] }) {
+  const rows = [
+    { label: "Backend", value: arch.backend },
+    { label: "Frontend", value: arch.frontend },
+    { label: "Database", value: arch.database },
+    { label: "Infrastructure", value: arch.infrastructure },
+  ];
+  return (
+    <div className="space-y-3">
+      {rows.map(({ label, value }) => (
+        <div key={label}>
+          <span className="text-xs font-semibold" style={{ color: "#7c6af7" }}>{label}</span>
+          <p className="text-sm mt-0.5" style={{ color: "#374151", lineHeight: 1.6 }}>{value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WBSSection({ phases }: { phases: BlueprintDocument["work_breakdown_structure"] }) {
+  return (
+    <div className="space-y-5">
+      {phases.map((phase) => (
+        <div key={phase.name}>
+          <p className="text-sm font-semibold mb-2" style={{ color: "#1f2937" }}>{phase.name}</p>
+          <div className="space-y-1.5">
+            {phase.tasks.map((task) => (
+              <div key={task.name} className="flex items-start gap-3 px-3 py-2 rounded-lg" style={{ background: "#f9fafb", border: "1px solid #f3f4f6" }}>
+                <span
+                  className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded font-medium mt-0.5"
+                  style={{ background: task.priority === "Must-Have" ? "#ede9fe" : "#f3f4f6", color: task.priority === "Must-Have" ? "#7c6af7" : "#6b7280" }}
+                >
+                  {task.priority === "Must-Have" ? "MVP" : "Later"}
+                </span>
+                <span className="flex-1 text-sm" style={{ color: "#374151" }}>{task.name}</span>
+                <span
+                  className="flex-shrink-0 text-xs font-medium"
+                  style={{ color: EFFORT_COLOR[task.estimated_effort] }}
+                >
+                  {task.estimated_effort}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RiskSection({ risks }: { risks: BlueprintDocument["risk_assessment"] }) {
+  return (
+    <div className="space-y-3">
+      {risks.map((r, i) => (
+        <div key={i} className="rounded-lg p-3" style={{ background: "rgba(248,113,113,0.05)", border: "1px solid rgba(248,113,113,0.15)" }}>
+          <div className="flex items-start gap-2 mb-1">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-0.5">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <p className="text-sm font-medium" style={{ color: "#dc2626" }}>{r.risk}</p>
+          </div>
+          <p className="text-xs pl-5" style={{ color: "#6b7280", lineHeight: 1.6 }}>
+            <span className="font-semibold" style={{ color: "#374151" }}>Mitigation: </span>
+            {r.mitigation_strategy}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DataModelSection({ entities }: { entities: BlueprintDocument["data_model_preview"] }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {entities.map((e) => (
+        <div key={e.name} className="rounded-lg px-3 py-2" style={{ background: "#f9fafb", border: "1px solid #e5e7eb", minWidth: "120px" }}>
+          <p className="text-xs font-semibold mb-1" style={{ color: "#1f2937" }}>{e.name}</p>
+          {e.relationships.map((r) => (
+            <p key={r} className="text-xs" style={{ color: "#9ca3af" }}>↳ {r}</p>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
@@ -333,6 +459,8 @@ interface DocumentProps {
   mood: MoodSelection | null;
   suggestions: string;
   projectDetails: ProjectDetails;
+  blueprintDoc: BlueprintDocument | null;
+  generating: boolean;
   onSuggestionsChange?: (v: string) => void;
   editable?: boolean;
 }
@@ -343,6 +471,8 @@ function BlueprintDocument({
   answers,
   mood,
   suggestions,
+  blueprintDoc,
+  generating,
   onSuggestionsChange,
   editable = false,
 }: DocumentProps) {
@@ -374,11 +504,32 @@ function BlueprintDocument({
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: dotColor }} />
             <span className="text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>{analysis.complexity} complexity</span>
           </div>
+          {generating && (
+            <span className="flex items-center gap-1.5 text-xs" style={{ color: "rgba(167,139,250,0.8)" }}>
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#a78bfa" }} />
+              Generating blueprint…
+            </span>
+          )}
         </div>
       </div>
 
       {/* Body */}
       <div style={{ padding: "28px 32px" }}>
+
+        {/* Executive summary */}
+        {(blueprintDoc || generating) && (
+          <>
+            <section>
+              <SectionLabel>Executive summary</SectionLabel>
+              {blueprintDoc ? (
+                <p className="text-sm leading-relaxed" style={{ color: "#374151" }}>
+                  {blueprintDoc.executive_summary}
+                </p>
+              ) : <Skeleton lines={3} />}
+            </section>
+            <SectionDivider />
+          </>
+        )}
 
         <section>
           <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#9ca3af" }}>Original pitch</p>
@@ -387,10 +538,10 @@ function BlueprintDocument({
           </blockquote>
         </section>
 
-        <hr style={{ borderColor: "rgba(0,0,0,0.08)", margin: "1.5rem 0" }} />
+        <SectionDivider />
 
         <section>
-          <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#9ca3af" }}>Suggested technology stack</p>
+          <SectionLabel>Suggested technology stack</SectionLabel>
           <div className="flex flex-wrap gap-2">
             {analysis.suggestedTechStack.map((tech) => (
               <span key={tech} className="px-3 py-1 rounded-full text-xs font-medium" style={{ background: "#f3f4f6", color: "#374151" }}>{tech}</span>
@@ -398,21 +549,34 @@ function BlueprintDocument({
           </div>
         </section>
 
-        <hr style={{ borderColor: "rgba(0,0,0,0.08)", margin: "1.5rem 0" }} />
+        {/* Technical architecture */}
+        {(blueprintDoc || generating) && (
+          <>
+            <SectionDivider />
+            <section>
+              <SectionLabel>Technical architecture</SectionLabel>
+              {blueprintDoc ? (
+                <TechArchSection arch={blueprintDoc.technical_architecture} />
+              ) : <Skeleton lines={4} />}
+            </section>
+          </>
+        )}
+
+        <SectionDivider />
 
         <section>
           <div className="flex items-center justify-between mb-4">
-            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "#9ca3af" }}>Project vitals</p>
+            <SectionLabel>Project vitals</SectionLabel>
             {editable && <span className="text-xs" style={{ color: "#c4b5fd" }}>Fill in as details are confirmed</span>}
           </div>
           <ProjectVitals editable={editable} />
         </section>
 
-        <hr style={{ borderColor: "rgba(0,0,0,0.08)", margin: "1.5rem 0" }} />
+        <SectionDivider />
 
         <section>
           <div className="flex items-center justify-between mb-4">
-            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "#9ca3af" }}>Discovery Q&A</p>
+            <SectionLabel>Discovery Q&A</SectionLabel>
             {editable && <span className="text-xs" style={{ color: "#c4b5fd" }}>Hover an answer to edit</span>}
           </div>
           <div className="space-y-5">
@@ -442,11 +606,70 @@ function BlueprintDocument({
           </div>
         </section>
 
+        {/* Work breakdown structure */}
+        {(blueprintDoc || generating) && (
+          <>
+            <SectionDivider />
+            <section>
+              <SectionLabel>Work breakdown structure</SectionLabel>
+              {blueprintDoc ? (
+                <WBSSection phases={blueprintDoc.work_breakdown_structure} />
+              ) : <Skeleton lines={6} />}
+            </section>
+          </>
+        )}
+
+        {/* Risk assessment */}
+        {(blueprintDoc || generating) && (
+          <>
+            <SectionDivider />
+            <section>
+              <SectionLabel>Risk assessment</SectionLabel>
+              {blueprintDoc ? (
+                <RiskSection risks={blueprintDoc.risk_assessment} />
+              ) : <Skeleton lines={3} />}
+            </section>
+          </>
+        )}
+
+        {/* Data model */}
+        {(blueprintDoc || generating) && (
+          <>
+            <SectionDivider />
+            <section>
+              <SectionLabel>Data model preview</SectionLabel>
+              {blueprintDoc ? (
+                <DataModelSection entities={blueprintDoc.data_model_preview} />
+              ) : <Skeleton lines={2} />}
+            </section>
+          </>
+        )}
+
+        {/* External integrations */}
+        {blueprintDoc && blueprintDoc.external_integrations.length > 0 && (
+          <>
+            <SectionDivider />
+            <section>
+              <SectionLabel>External integrations</SectionLabel>
+              <div className="flex flex-wrap gap-2">
+                {blueprintDoc.external_integrations.map((integration) => (
+                  <span key={integration} className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs" style={{ background: "#eff6ff", color: "#3b82f6", border: "1px solid #bfdbfe" }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+                    </svg>
+                    {integration}
+                  </span>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+
         {mood && (
           <>
-            <hr style={{ borderColor: "rgba(0,0,0,0.08)", margin: "1.5rem 0" }} />
+            <SectionDivider />
             <section>
-              <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#9ca3af" }}>Visual identity</p>
+              <SectionLabel>Visual identity</SectionLabel>
               <div className="flex items-center gap-4">
                 <div className="flex gap-1.5">
                   {mood.palette.map((c) => <div key={c} className="w-8 h-8 rounded-full" style={{ background: c, border: "2px solid rgba(0,0,0,0.06)" }} />)}
@@ -460,30 +683,11 @@ function BlueprintDocument({
           </>
         )}
 
-        <hr style={{ borderColor: "rgba(0,0,0,0.08)", margin: "1.5rem 0" }} />
-
-        <section>
-          <p className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: "#9ca3af" }}>Recommended next steps</p>
-          <ol className="space-y-2.5">
-            {[
-              "Share this blueprint with your development team",
-              "Schedule a kickoff call to align on scope",
-              "Request a detailed quote based on complexity",
-              analysis.visualRequirements ? "Commission brand identity assets" : "Finalize wireframes and user flows",
-            ].map((step, i) => (
-              <li key={i} className="flex items-start gap-3 text-sm" style={{ color: "#374151" }}>
-                <span className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold mt-0.5" style={{ background: "#ede9fe", color: "#7c6af7" }}>{i + 1}</span>
-                {step}
-              </li>
-            ))}
-          </ol>
-        </section>
-
         {(editable || suggestions.trim()) && (
           <>
-            <hr style={{ borderColor: "rgba(0,0,0,0.08)", margin: "1.5rem 0" }} />
+            <SectionDivider />
             <section>
-              <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#9ca3af" }}>Notes & suggestions</p>
+              <SectionLabel>Notes & suggestions</SectionLabel>
               {editable && onSuggestionsChange ? (
                 <textarea
                   value={suggestions}
@@ -552,21 +756,70 @@ export default function Blueprint() {
     analysis, answers, moodSelection, pitch,
     suggestions, setSuggestions,
     projectDetails,
+    blueprintDoc, setBlueprintDoc,
     reset, saveBlueprint,
   } = useLucidraftStore();
 
   const [fullscreen, setFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState("");
+
+  // Trigger blueprint generation on mount if not already available
+  useEffect(() => {
+    if (!analysis || blueprintDoc) return;
+
+    async function generate() {
+      setGenerating(true);
+      setGenError("");
+      try {
+        const qaItems = analysis!.dynamicQuestions.map((q) => ({
+          question: q.label,
+          answer: (() => {
+            const raw = answers[q.id];
+            return Array.isArray(raw) ? raw.join(", ") : raw || "";
+          })(),
+        }));
+
+        const res = await fetch("/api/blueprint", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pitch,
+            qaItems,
+            suggestedTechStack: analysis!.suggestedTechStack,
+            primaryCategory: analysis!.primaryCategory,
+            complexity: analysis!.complexity,
+          }),
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error ?? "Blueprint generation failed");
+        }
+
+        const doc: BlueprintDocument = await res.json();
+        setBlueprintDoc(doc);
+      } catch (err: unknown) {
+        setGenError(err instanceof Error ? err.message : "Something went wrong");
+      } finally {
+        setGenerating(false);
+      }
+    }
+
+    generate();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleCopy = useCallback(() => {
     if (!analysis) return;
-    const text = buildPlainText(pitch, analysis, answers, moodSelection, suggestions, projectDetails);
+    const text = buildPlainText(pitch, analysis, answers, moodSelection, suggestions, projectDetails, blueprintDoc);
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
-  }, [pitch, analysis, answers, moodSelection, suggestions, projectDetails]);
+  }, [pitch, analysis, answers, moodSelection, suggestions, projectDetails, blueprintDoc]);
 
   const handleSave = useCallback(() => {
     saveBlueprint();
@@ -581,6 +834,8 @@ export default function Blueprint() {
     mood: moodSelection,
     suggestions,
     projectDetails,
+    blueprintDoc,
+    generating,
     onSuggestionsChange: setSuggestions,
   };
 
@@ -600,6 +855,20 @@ export default function Blueprint() {
           </div>
           <span className="text-xs" style={{ color: "var(--text-muted)" }}>{formatDate()}</span>
         </div>
+
+        {genError && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 px-4 py-2.5 rounded-xl text-xs flex items-center gap-2"
+            style={{ background: "rgba(248,113,113,0.1)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)" }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            Blueprint generation failed: {genError}
+          </motion.div>
+        )}
 
         {/* Inline document — editable */}
         <div className="rounded-2xl overflow-hidden mb-5" style={{ border: "1px solid var(--border-glass)", boxShadow: "0 0 40px rgba(124,106,247,0.12)" }}>

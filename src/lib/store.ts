@@ -6,6 +6,7 @@ import {
   AnalysisResult,
   AnswerMap,
   AppStep,
+  BlueprintDocument,
   MoodSelection,
   ProjectDetails,
   SavedBlueprint,
@@ -38,6 +39,7 @@ interface LucidraftStore {
   moodSelection: MoodSelection | null;
   suggestions: string;
   projectDetails: ProjectDetails;
+  blueprintDoc: BlueprintDocument | null;
 
   // ── persisted state ────────────────────────────────────────
   savedBlueprints: SavedBlueprint[];
@@ -47,6 +49,7 @@ interface LucidraftStore {
   setPitch: (pitch: string) => void;
   setStep: (step: AppStep) => void;
   setAnalysis: (result: AnalysisResult) => void;
+  setBlueprintDoc: (doc: BlueprintDocument) => void;
   setAnswer: (id: string, value: string | string[]) => void;
   nextQuestion: () => void;
   prevQuestion: () => void;
@@ -78,6 +81,7 @@ const sessionDefaults = {
   moodSelection: null,
   suggestions: "",
   projectDetails: { ...DEFAULT_PROJECT_DETAILS },
+  blueprintDoc: null,
 };
 
 // ── store ─────────────────────────────────────────────────────────────────────
@@ -92,6 +96,7 @@ export const useLucidraftStore = create<LucidraftStore>()(
       setPitch: (pitch) => set({ pitch }),
       setStep: (step) => set({ step }),
       setAnalysis: (analysis) => set({ analysis }),
+      setBlueprintDoc: (blueprintDoc) => set({ blueprintDoc }),
       setAnswer: (id, value) =>
         set((s) => ({ answers: { ...s.answers, [id]: value } })),
       nextQuestion: () => {
@@ -182,12 +187,13 @@ export const useLucidraftStore = create<LucidraftStore>()(
 
       // history
       saveBlueprint: () => {
-        const { pitch, analysis, answers, moodSelection, suggestions, projectDetails, savedBlueprints } = get();
+        const { pitch, analysis, answers, moodSelection, suggestions, projectDetails, blueprintDoc, savedBlueprints } = get();
         if (!analysis) return;
         const entry: SavedBlueprint = {
           id: crypto.randomUUID(),
           savedAt: new Date().toISOString(),
           pitch, analysis, answers, moodSelection, suggestions, projectDetails,
+          blueprintDoc: blueprintDoc ?? undefined,
         };
         const filtered = savedBlueprints.filter((b) => b.pitch !== pitch);
         set({ savedBlueprints: [entry, ...filtered].slice(0, 20) });
@@ -203,6 +209,7 @@ export const useLucidraftStore = create<LucidraftStore>()(
           moodSelection: blueprint.moodSelection,
           suggestions: blueprint.suggestions,
           projectDetails: blueprint.projectDetails ?? { ...DEFAULT_PROJECT_DETAILS },
+          blueprintDoc: blueprint.blueprintDoc ?? null,
           currentQuestionIndex: 0,
           step: "blueprint",
         });
