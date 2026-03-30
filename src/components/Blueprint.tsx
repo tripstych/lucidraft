@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLucidraftStore } from "@/lib/store";
-import { AnalysisResult, MoodSelection } from "@/types";
+import { AnalysisResult, MoodSelection, ProjectDetails } from "@/types";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -21,12 +21,24 @@ function formatDate(iso?: string) {
   });
 }
 
+const VITALS_LABELS: Record<string, string> = {
+  projectName: "Project name",
+  domain: "Domain / URL",
+  hosting: "Hosting / deployment",
+  repository: "Repository",
+  authMethod: "Authentication",
+  budgetRange: "Budget range",
+  targetLaunch: "Target launch",
+  primaryContact: "Primary contact",
+};
+
 function buildPlainText(
   pitch: string,
   analysis: AnalysisResult,
   answers: Record<string, string | string[]>,
   mood: MoodSelection | null,
-  suggestions: string
+  suggestions: string,
+  projectDetails: ProjectDetails
 ): string {
   const lines: string[] = [
     "PROJECT BLUEPRINT — Lucidraft",
@@ -40,14 +52,23 @@ function buildPlainText(
     "",
     "ORIGINAL PITCH",
     `"${pitch}"`,
+  ];
+
+  const filledVitals = Object.entries(VITALS_LABELS).filter(([k]) => projectDetails[k]?.trim());
+  if (filledVitals.length > 0) {
+    lines.push("", "PROJECT VITALS");
+    filledVitals.forEach(([k, label]) => lines.push(`${label}: ${projectDetails[k]}`));
+  }
+
+  lines.push(
     "",
     "DISCOVERY Q&A",
     ...analysis.dynamicQuestions.map((q) => {
       const a = answers[q.id];
       const val = Array.isArray(a) ? a.join(", ") : a || "—";
       return `• ${q.label}\n  ${val}`;
-    }),
-  ];
+    })
+  );
 
   if (mood) {
     lines.push("", "VISUAL IDENTITY", `Mood: ${mood.mood}`, `Style: ${mood.style}`);
@@ -69,6 +90,68 @@ function buildPlainText(
   }
 
   return lines.join("\n");
+}
+
+// ─── project vitals grid ─────────────────────────────────────────────────────
+
+function VitalField({
+  fieldKey,
+  label,
+  placeholder,
+  editable,
+}: {
+  fieldKey: keyof ProjectDetails;
+  label: string;
+  placeholder: string;
+  editable: boolean;
+}) {
+  const { projectDetails, setProjectDetail } = useLucidraftStore();
+  const value = projectDetails[fieldKey] ?? "";
+
+  return (
+    <div>
+      <p className="text-xs mb-1 font-medium" style={{ color: "#9ca3af" }}>{label}</p>
+      {editable ? (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => setProjectDetail(fieldKey, e.target.value)}
+          placeholder={placeholder}
+          className="w-full px-3 py-1.5 rounded-lg text-xs outline-none transition-colors"
+          style={{
+            background: value ? "#f9fafb" : "#f3f4f6",
+            border: `1px solid ${value ? "#e5e7eb" : "#e5e7eb"}`,
+            color: "#374151",
+          }}
+        />
+      ) : (
+        <p className="text-sm" style={{ color: value ? "#1f2937" : "#d1d5db" }}>
+          {value || "—"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const VITAL_FIELDS: { key: keyof ProjectDetails; label: string; placeholder: string }[] = [
+  { key: "projectName",   label: "Project name",         placeholder: "e.g. Acme Dashboard" },
+  { key: "domain",        label: "Domain / URL",          placeholder: "e.g. app.acme.com" },
+  { key: "hosting",       label: "Hosting / deployment",  placeholder: "e.g. Vercel, AWS, self-hosted" },
+  { key: "repository",    label: "Repository",            placeholder: "e.g. github.com/org/repo" },
+  { key: "authMethod",    label: "Authentication",        placeholder: "e.g. Email + Google OAuth" },
+  { key: "budgetRange",   label: "Budget range",          placeholder: "e.g. £5k–£15k" },
+  { key: "targetLaunch",  label: "Target launch",         placeholder: "e.g. Q3 2025" },
+  { key: "primaryContact",label: "Primary contact",       placeholder: "e.g. Jane Smith, jane@acme.com" },
+];
+
+function ProjectVitals({ editable }: { editable: boolean }) {
+  return (
+    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+      {VITAL_FIELDS.map((f) => (
+        <VitalField key={f.key} fieldKey={f.key} label={f.label} placeholder={f.placeholder} editable={editable} />
+      ))}
+    </div>
+  );
 }
 
 // ─── editable answer row ──────────────────────────────────────────────────────
@@ -221,6 +304,7 @@ interface DocumentProps {
   answers: Record<string, string | string[]>;
   mood: MoodSelection | null;
   suggestions: string;
+  projectDetails: ProjectDetails;
   onSuggestionsChange?: (v: string) => void;
   editable?: boolean;
 }
@@ -284,6 +368,16 @@ function BlueprintDocument({
               <span key={tech} className="px-3 py-1 rounded-full text-xs font-medium" style={{ background: "#f3f4f6", color: "#374151" }}>{tech}</span>
             ))}
           </div>
+        </section>
+
+        <hr style={{ borderColor: "rgba(0,0,0,0.08)", margin: "1.5rem 0" }} />
+
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "#9ca3af" }}>Project vitals</p>
+            {editable && <span className="text-xs" style={{ color: "#c4b5fd" }}>Fill in as details are confirmed</span>}
+          </div>
+          <ProjectVitals editable={editable} />
         </section>
 
         <hr style={{ borderColor: "rgba(0,0,0,0.08)", margin: "1.5rem 0" }} />
@@ -429,6 +523,7 @@ export default function Blueprint() {
   const {
     analysis, answers, moodSelection, pitch,
     suggestions, setSuggestions,
+    projectDetails,
     reset, saveBlueprint,
   } = useLucidraftStore();
 
@@ -438,12 +533,12 @@ export default function Blueprint() {
 
   const handleCopy = useCallback(() => {
     if (!analysis) return;
-    const text = buildPlainText(pitch, analysis, answers, moodSelection, suggestions);
+    const text = buildPlainText(pitch, analysis, answers, moodSelection, suggestions, projectDetails);
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
-  }, [pitch, analysis, answers, moodSelection, suggestions]);
+  }, [pitch, analysis, answers, moodSelection, suggestions, projectDetails]);
 
   const handleSave = useCallback(() => {
     saveBlueprint();
@@ -457,6 +552,7 @@ export default function Blueprint() {
     pitch, analysis, answers,
     mood: moodSelection,
     suggestions,
+    projectDetails,
     onSuggestionsChange: setSuggestions,
   };
 

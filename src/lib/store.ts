@@ -7,7 +7,9 @@ import {
   AnswerMap,
   AppStep,
   MoodSelection,
+  ProjectDetails,
   SavedBlueprint,
+  DEFAULT_PROJECT_DETAILS,
 } from "@/types";
 
 interface LucidraftStore {
@@ -19,6 +21,7 @@ interface LucidraftStore {
   currentQuestionIndex: number;
   moodSelection: MoodSelection | null;
   suggestions: string;
+  projectDetails: ProjectDetails;
 
   // ── persisted state ────────────────────────────────────────
   savedBlueprints: SavedBlueprint[];
@@ -32,6 +35,7 @@ interface LucidraftStore {
   prevQuestion: () => void;
   setMoodSelection: (mood: MoodSelection) => void;
   setSuggestions: (text: string) => void;
+  setProjectDetail: (key: keyof ProjectDetails, value: string) => void;
   reset: () => void;
 
   // ── history actions ────────────────────────────────────────
@@ -48,6 +52,7 @@ const sessionDefaults = {
   currentQuestionIndex: 0,
   moodSelection: null,
   suggestions: "",
+  projectDetails: { ...DEFAULT_PROJECT_DETAILS },
 };
 
 export const useLucidraftStore = create<LucidraftStore>()(
@@ -74,11 +79,12 @@ export const useLucidraftStore = create<LucidraftStore>()(
       },
       setMoodSelection: (moodSelection) => set({ moodSelection }),
       setSuggestions: (suggestions) => set({ suggestions }),
+      setProjectDetail: (key, value) =>
+        set((s) => ({ projectDetails: { ...s.projectDetails, [key]: value } })),
       reset: () => set(sessionDefaults),
 
       saveBlueprint: () => {
-        const { pitch, analysis, answers, moodSelection, suggestions, savedBlueprints } =
-          get();
+        const { pitch, analysis, answers, moodSelection, suggestions, projectDetails, savedBlueprints } = get();
         if (!analysis) return;
 
         const entry: SavedBlueprint = {
@@ -89,9 +95,9 @@ export const useLucidraftStore = create<LucidraftStore>()(
           answers,
           moodSelection,
           suggestions,
+          projectDetails,
         };
 
-        // Replace if same pitch already saved, otherwise prepend; cap at 20
         const filtered = savedBlueprints.filter((b) => b.pitch !== pitch);
         set({ savedBlueprints: [entry, ...filtered].slice(0, 20) });
       },
@@ -105,6 +111,7 @@ export const useLucidraftStore = create<LucidraftStore>()(
           answers: blueprint.answers,
           moodSelection: blueprint.moodSelection,
           suggestions: blueprint.suggestions,
+          projectDetails: blueprint.projectDetails ?? { ...DEFAULT_PROJECT_DETAILS },
           currentQuestionIndex: 0,
           step: "blueprint",
         });
@@ -117,7 +124,6 @@ export const useLucidraftStore = create<LucidraftStore>()(
     }),
     {
       name: "lucidraft-storage",
-      // Only persist history — session state resets each visit
       partialize: (state) => ({ savedBlueprints: state.savedBlueprints }),
     }
   )
