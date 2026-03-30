@@ -70,3 +70,25 @@ export interface SavedBlueprint {
   suggestions: string;
   projectDetails: ProjectDetails;
 }
+
+// ── diff types ────────────────────────────────────────────────────────────────
+
+export interface BlueprintDiff {
+  categoryChanged: boolean;
+  complexityChanged: boolean;
+  stackAdded: string[];
+  stackRemoved: string[];
+  stackUnchanged: string[];
+  changedVitals: Array<{
+    key: keyof ProjectDetails;
+    label: string;
+    before: string;
+    after: string;
+  }>;
+  changedAnswers: Array<{
+    id: string;
+    label: string;
+    before: string;
+    after: string;
+  }>;
+}

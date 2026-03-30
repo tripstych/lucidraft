@@ -10,8 +10,8 @@ const DynamicQuestionSchema = z.object({
   id: z.string(),
   label: z.string(),
   type: z.enum(["text", "select", "multiselect", "textarea"]),
-  placeholder: z.string().optional(),
-  options: z.array(z.string()).optional(),
+  placeholder: z.string().nullable(),
+  options: z.array(z.string()).nullable(),
   required: z.boolean(),
 });
 
@@ -24,27 +24,45 @@ const AnalysisSchema = z.object({
   visualRequirements: z.boolean(),
 });
 
-const SYSTEM_PROMPT = `You are Lucidraft, an expert software project consultant.
-Given a user's project pitch, perform a deep analysis and return a JSON object.
+// JSON Schema for OpenAI Structured Outputs (strict: true)
+const RESPONSE_FORMAT = {
+  type: "json_schema" as const,
+  json_schema: {
+    name: "analysis_result",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        primaryCategory: { type: "string", enum: ["Web", "Mobile", "Desktop", "Unknown"] },
+        complexity: { type: "string", enum: ["Simple", "Medium", "Complex"] },
+        summary: { type: "string" },
+        suggestedTechStack: { type: "array", items: { type: "string" } },
+        dynamicQuestions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              label: { type: "string" },
+              type: { type: "string", enum: ["text", "select", "multiselect", "textarea"] },
+              placeholder: { anyOf: [{ type: "string" }, { type: "null" }] },
+              options: { anyOf: [{ type: "array", items: { type: "string" } }, { type: "null" }] },
+              required: { type: "boolean" },
+            },
+            required: ["id", "label", "type", "placeholder", "options", "required"],
+            additionalProperties: false,
+          },
+        },
+        visualRequirements: { type: "boolean" },
+      },
+      required: ["primaryCategory", "complexity", "summary", "suggestedTechStack", "dynamicQuestions", "visualRequirements"],
+      additionalProperties: false,
+    },
+  },
+};
 
-Return ONLY valid JSON with this exact shape (no markdown, no explanation):
-{
-  "primaryCategory": "Web" | "Mobile" | "Desktop" | "Unknown",
-  "complexity": "Simple" | "Medium" | "Complex",
-  "summary": "one sentence describing what you understood",
-  "suggestedTechStack": ["tech1", "tech2", "tech3"],
-  "dynamicQuestions": [
-    {
-      "id": "unique_snake_case_id",
-      "label": "Question text?",
-      "type": "text" | "select" | "multiselect" | "textarea",
-      "placeholder": "optional hint",
-      "options": ["option1", "option2"],
-      "required": true
-    }
-  ],
-  "visualRequirements": true | false
-}
+const SYSTEM_PROMPT = `You are Lucidraft, an expert software project consultant.
+Given a user's project pitch, perform a deep analysis and populate the structured output fields.
 
 Rules for dynamicQuestions — generate exactly 6-8 questions covering ALL of these areas (skip any already answered in the pitch):
 
@@ -84,7 +102,7 @@ export async function POST(req: NextRequest) {
           content: `Analyze this project pitch:\n\n"${pitch.trim()}"`,
         },
       ],
-      response_format: { type: "json_object" },
+      response_format: RESPONSE_FORMAT,
       temperature: 0.4,
     });
 
