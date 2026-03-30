@@ -12,6 +12,22 @@ import {
   DEFAULT_PROJECT_DETAILS,
 } from "@/types";
 
+// ── cache helpers ─────────────────────────────────────────────────────────────
+
+export interface CacheEntry {
+  result: AnalysisResult;
+  cachedAt: string; // ISO
+}
+
+/** Stable cache key — normalised pitch string */
+export function cacheKey(pitch: string): string {
+  return pitch.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+const CACHE_MAX = 30;
+
+// ── store interface ───────────────────────────────────────────────────────────
+
 interface LucidraftStore {
   // ── session state ──────────────────────────────────────────
   step: AppStep;
@@ -25,6 +41,7 @@ interface LucidraftStore {
 
   // ── persisted state ────────────────────────────────────────
   savedBlueprints: SavedBlueprint[];
+  analysisCache: Record<string, CacheEntry>;
 
   // ── session actions ────────────────────────────────────────
   setPitch: (pitch: string) => void;
@@ -37,6 +54,11 @@ interface LucidraftStore {
   setSuggestions: (text: string) => void;
   setProjectDetail: (key: keyof ProjectDetails, value: string) => void;
   reset: () => void;
+
+  // ── cache actions ──────────────────────────────────────────
+  getCachedAnalysis: (pitch: string) => AnalysisResult | null;
+  setCachedAnalysis: (pitch: string, result: AnalysisResult) => void;
+  clearCacheEntry: (pitch: string) => void;
 
   // ── history actions ────────────────────────────────────────
   saveBlueprint: () => void;
@@ -55,11 +77,14 @@ const sessionDefaults = {
   projectDetails: { ...DEFAULT_PROJECT_DETAILS },
 };
 
+// ── store ─────────────────────────────────────────────────────────────────────
+
 export const useLucidraftStore = create<LucidraftStore>()(
   persist(
     (set, get) => ({
       ...sessionDefaults,
       savedBlueprints: [],
+      analysisCache: {},
 
       setPitch: (pitch) => set({ pitch }),
       setStep: (step) => set({ step }),
@@ -83,21 +108,47 @@ export const useLucidraftStore = create<LucidraftStore>()(
         set((s) => ({ projectDetails: { ...s.projectDetails, [key]: value } })),
       reset: () => set(sessionDefaults),
 
+      // cache
+      getCachedAnalysis: (pitch) => {
+        const entry = get().analysisCache[cacheKey(pitch)];
+        return entry?.result ?? null;
+      },
+
+      setCachedAnalysis: (pitch, result) => {
+        const key = cacheKey(pitch);
+        const existing = get().analysisCache;
+        const entries = Object.entries(existing);
+
+        // Evict oldest when at capacity
+        let next = { ...existing, [key]: { result, cachedAt: new Date().toISOString() } };
+        if (entries.length >= CACHE_MAX && !existing[key]) {
+          const oldest = entries.sort(
+            (a, b) => new Date(a[1].cachedAt).getTime() - new Date(b[1].cachedAt).getTime()
+          )[0][0];
+          delete next[oldest];
+        }
+
+        set({ analysisCache: next });
+      },
+
+      clearCacheEntry: (pitch) => {
+        const key = cacheKey(pitch);
+        set((s) => {
+          const next = { ...s.analysisCache };
+          delete next[key];
+          return { analysisCache: next };
+        });
+      },
+
+      // history
       saveBlueprint: () => {
         const { pitch, analysis, answers, moodSelection, suggestions, projectDetails, savedBlueprints } = get();
         if (!analysis) return;
-
         const entry: SavedBlueprint = {
           id: crypto.randomUUID(),
           savedAt: new Date().toISOString(),
-          pitch,
-          analysis,
-          answers,
-          moodSelection,
-          suggestions,
-          projectDetails,
+          pitch, analysis, answers, moodSelection, suggestions, projectDetails,
         };
-
         const filtered = savedBlueprints.filter((b) => b.pitch !== pitch);
         set({ savedBlueprints: [entry, ...filtered].slice(0, 20) });
       },
@@ -118,13 +169,14 @@ export const useLucidraftStore = create<LucidraftStore>()(
       },
 
       deleteBlueprint: (id) =>
-        set((s) => ({
-          savedBlueprints: s.savedBlueprints.filter((b) => b.id !== id),
-        })),
+        set((s) => ({ savedBlueprints: s.savedBlueprints.filter((b) => b.id !== id) })),
     }),
     {
       name: "lucidraft-storage",
-      partialize: (state) => ({ savedBlueprints: state.savedBlueprints }),
+      partialize: (state) => ({
+        savedBlueprints: state.savedBlueprints,
+        analysisCache: state.analysisCache,
+      }),
     }
   )
 );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DynamicQuestion, AnalysisResult } from "@/types";
 import { useLucidraftStore } from "@/lib/store";
@@ -67,7 +67,12 @@ function SelectAnswer({
   onChange: (v: string | string[]) => void;
   multi: boolean;
 }) {
+  const [customInput, setCustomInput] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
   const selected: string[] = Array.isArray(value) ? value : value ? [value] : [];
+  const presetOptions = question.options ?? [];
+  // Custom values are selections not in the preset list
+  const customValues = selected.filter((s) => !presetOptions.includes(s));
 
   function toggle(opt: string) {
     if (multi) {
@@ -76,13 +81,24 @@ function SelectAnswer({
         : [...selected, opt];
       onChange(next);
     } else {
-      onChange(opt);
+      onChange(selected.includes(opt) ? [] : opt);
     }
   }
 
+  function addCustom() {
+    const val = customInput.trim();
+    if (!val) return;
+    if (multi) {
+      if (!selected.includes(val)) onChange([...selected, val]);
+    } else {
+      onChange(val);
+    }
+    setCustomInput("");
+  }
+
   return (
-    <div className="grid grid-cols-1 gap-2">
-      {(question.options ?? []).map((opt) => {
+    <div className="space-y-2">
+      {presetOptions.map((opt) => {
         const active = selected.includes(opt);
         return (
           <motion.button
@@ -90,7 +106,7 @@ function SelectAnswer({
             onClick={() => toggle(opt)}
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.99 }}
-            className="text-left px-4 py-3 rounded-xl text-sm transition-all duration-150"
+            className="w-full text-left px-4 py-3 rounded-xl text-sm transition-all duration-150"
             style={{
               background: active ? "rgba(124,106,247,0.18)" : "var(--bg-glass)",
               border: `1px solid ${active ? "rgba(124,106,247,0.5)" : "var(--border-glass)"}`,
@@ -116,6 +132,58 @@ function SelectAnswer({
           </motion.button>
         );
       })}
+
+      {/* Custom value chips (multiselect) */}
+      {multi && customValues.length > 0 && (
+        <div className="flex flex-wrap gap-2 pt-1">
+          {customValues.map((v) => (
+            <span
+              key={v}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-sm"
+              style={{ background: "rgba(124,106,247,0.18)", border: "1px solid rgba(124,106,247,0.5)", color: "#a78bfa" }}
+            >
+              {v}
+              <button
+                onClick={() => onChange(selected.filter((s) => s !== v))}
+                className="opacity-60 hover:opacity-100 transition-opacity"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Type your own */}
+      <div
+        className="flex items-center gap-2 px-4 py-2.5 rounded-xl"
+        style={{ background: "var(--bg-glass)", border: "1px solid var(--border-glass)" }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--text-muted)", flexShrink: 0 }}>
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        <input
+          ref={inputRef}
+          type="text"
+          value={customInput}
+          onChange={(e) => setCustomInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
+          placeholder="Type your own answer..."
+          className="flex-1 bg-transparent outline-none text-sm"
+          style={{ color: "var(--text-primary)" }}
+        />
+        {customInput.trim() && (
+          <button
+            onClick={addCustom}
+            className="text-xs px-2.5 py-1 rounded-lg flex-shrink-0"
+            style={{ background: "rgba(124,106,247,0.25)", color: "#a78bfa", border: "none" }}
+          >
+            {multi ? "Add" : "Use this"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -171,20 +171,23 @@ function EditableAnswer({
 }) {
   const { answers, setAnswer } = useLucidraftStore();
   const [editing, setEditing] = useState(false);
+  const [customInput, setCustomInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const customInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (editing && inputRef.current) inputRef.current.focus();
+    if (editing && !hasOptions && inputRef.current) inputRef.current.focus();
   }, [editing]);
 
   const raw = answers[questionId];
   const value: string[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  const hasOptions = (options?.length ?? 0) > 0;
+  const presetOptions = options ?? [];
+  const customValues = value.filter((v) => !presetOptions.includes(v));
 
   function toggleOption(opt: string) {
     if (multi) {
-      const next = value.includes(opt)
-        ? value.filter((v) => v !== opt)
-        : [...value, opt];
+      const next = value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt];
       setAnswer(questionId, next);
     } else {
       setAnswer(questionId, opt);
@@ -192,7 +195,17 @@ function EditableAnswer({
     }
   }
 
-  const hasOptions = (options?.length ?? 0) > 0;
+  function addCustom() {
+    const val = customInput.trim();
+    if (!val) return;
+    if (multi) {
+      if (!value.includes(val)) setAnswer(questionId, [...value, val]);
+    } else {
+      setAnswer(questionId, val);
+      setEditing(false);
+    }
+    setCustomInput("");
+  }
 
   return (
     <div className="group flex gap-4">
@@ -230,64 +243,79 @@ function EditableAnswer({
             </button>
           </div>
         ) : (
-          <div>
-            {hasOptions ? (
-              <div className="space-y-1.5">
-                {options!.map((opt) => {
-                  const active = value.includes(opt);
-                  return (
-                    <button
-                      key={opt}
-                      onClick={() => toggleOption(opt)}
-                      className="flex items-center gap-2 w-full text-left px-3 py-1.5 rounded-lg text-xs transition-all"
-                      style={{
-                        background: active ? "#ede9fe" : "#f9fafb",
-                        color: active ? "#7c6af7" : "#374151",
-                        border: `1px solid ${active ? "#c4b5fd" : "#e5e7eb"}`,
-                      }}
-                    >
-                      <span
-                        className="w-3.5 h-3.5 rounded-sm flex-shrink-0 flex items-center justify-center"
-                        style={{ background: active ? "#7c6af7" : "#e5e7eb", border: `1px solid ${active ? "#7c6af7" : "#d1d5db"}` }}
-                      >
-                        {active && (
-                          <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
-                            <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-                          </svg>
-                        )}
-                      </span>
-                      {opt}
+          <div className="space-y-1.5">
+            {hasOptions && presetOptions.map((opt) => {
+              const active = value.includes(opt);
+              return (
+                <button
+                  key={opt}
+                  onClick={() => toggleOption(opt)}
+                  className="flex items-center gap-2 w-full text-left px-3 py-1.5 rounded-lg text-xs transition-all"
+                  style={{
+                    background: active ? "#ede9fe" : "#f9fafb",
+                    color: active ? "#7c6af7" : "#374151",
+                    border: `1px solid ${active ? "#c4b5fd" : "#e5e7eb"}`,
+                  }}
+                >
+                  <span
+                    className="w-3.5 h-3.5 rounded-sm flex-shrink-0 flex items-center justify-center"
+                    style={{ background: active ? "#7c6af7" : "#e5e7eb", border: `1px solid ${active ? "#7c6af7" : "#d1d5db"}` }}
+                  >
+                    {active && <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" /></svg>}
+                  </span>
+                  {opt}
+                </button>
+              );
+            })}
+
+            {/* Custom value chips */}
+            {multi && customValues.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 py-1">
+                {customValues.map((v) => (
+                  <span key={v} className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs" style={{ background: "#ede9fe", color: "#7c6af7", border: "1px solid #c4b5fd" }}>
+                    {v}
+                    <button onClick={() => setAnswer(questionId, value.filter((s) => s !== v))} className="opacity-60 hover:opacity-100">
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
                     </button>
-                  );
-                })}
-                <button
-                  onClick={() => setEditing(false)}
-                  className="mt-1 text-xs px-3 py-1 rounded-lg"
-                  style={{ background: "#7c6af7", color: "#fff", border: "none" }}
-                >
-                  Done
-                </button>
+                  </span>
+                ))}
               </div>
-            ) : (
-              <div className="flex gap-2">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  defaultValue={value[0] ?? ""}
-                  onChange={(e) => setAnswer(questionId, e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && setEditing(false)}
-                  className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none"
-                  style={{ background: "#f9fafb", border: "1px solid #c4b5fd", color: "#1f2937" }}
-                  placeholder="Your answer..."
-                />
-                <button
-                  onClick={() => setEditing(false)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium"
-                  style={{ background: "#7c6af7", color: "#fff", border: "none" }}
-                >
-                  Save
+            )}
+
+            {/* Type your own */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: "#f9fafb", border: "1px solid #e5e7eb" }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+              <input
+                ref={hasOptions ? customInputRef : inputRef}
+                type="text"
+                value={hasOptions ? customInput : (value[0] ?? "")}
+                onChange={(e) => hasOptions ? setCustomInput(e.target.value) : setAnswer(questionId, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    hasOptions ? addCustom() : setEditing(false);
+                  }
+                }}
+                placeholder={hasOptions ? "Type your own..." : "Your answer..."}
+                className="flex-1 bg-transparent outline-none text-xs"
+                style={{ color: "#374151" }}
+              />
+              {hasOptions && customInput.trim() && (
+                <button onClick={addCustom} className="text-xs px-2 py-0.5 rounded" style={{ background: "#7c6af7", color: "#fff", border: "none" }}>
+                  {multi ? "Add" : "Use"}
                 </button>
-              </div>
+              )}
+            </div>
+
+            {hasOptions && (
+              <button onClick={() => setEditing(false)} className="text-xs px-3 py-1 rounded-lg" style={{ background: "#7c6af7", color: "#fff", border: "none" }}>
+                Done
+              </button>
+            )}
+            {!hasOptions && (
+              <button onClick={() => setEditing(false)} className="text-xs px-3 py-1 rounded-lg" style={{ background: "#7c6af7", color: "#fff", border: "none" }}>
+                Save
+              </button>
             )}
           </div>
         )}
